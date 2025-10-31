@@ -31,10 +31,35 @@ def extract_frames(video_path):
     return frames
 
 def preprocess_frame(frame):
-    # returns grayscale, optionally downsampled, and PIL for hashing
     if DOWNSAMPLE_HW:
         h, w = DOWNSAMPLE_HW
         frame = cv2.resize(frame, (w, h), interpolation=cv2.INTER_AREA)
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     pil = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     return gray, pil
+
+def phash_for_frames(frames):
+    hashes = []
+    grays = []
+    pil_images = []
+    for f in frames:
+        gray, pil = preprocess_frame(f)
+        grays.append(gray)
+        pil_images.append(pil)
+        hashes.append(imagehash.phash(pil))  
+    return hashes, grays
+
+def hamming_distance(a, b):
+    return (a - b).hash.astype(bool).sum() if False else bin(int(str(a), 16) ^ int(str(b), 16)).count("1")
+
+def phash_hamming(a, b):
+    return a - b
+
+def shortlist_candidates(hashes, k=K_PHASH_CANDIDATES):
+    n = len(hashes)
+    cand_idxs = [None]*n
+    for i in range(n):
+        dists = [(phash_hamming(hashes[i], hashes[j]), j) for j in range(n) if j!=i]
+        dists.sort(key=lambda x: x[0])
+        cand_idxs[i] = [j for (_, j) in dists[:k]]
+    return cand_idxs
