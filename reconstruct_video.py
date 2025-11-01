@@ -67,12 +67,17 @@ def shortlist_candidates(hashes, k=K_PHASH_CANDIDATES):
 
 def _ssim_worker(args):
     i, j, gray_i, gray_j = args
-    score = ssim(gray_i, gray_j, data_range=gray_j.max() - gray_j.min())
+    score_ssim = ssim(gray_i, gray_j, data_range=gray_j.max() - gray_j.min())
+    global HASHES  
+    score_phash = 1 - (HASHES[i] - HASHES[j]) / 64.0
+    score = 0.7 * score_ssim + 0.3 * score_phash
     return (i, j, score)
 
 def compute_ssim_graph(grays, candidate_indices):
     n = len(grays)
-    edges = {i: [] for i in range(n)}  
+    edges = {i: [] for i in range(n)} 
+    global HASHES
+    HASHES = hashes 
     tasks = []
     for i in range(n):
         for j in candidate_indices[i]:
