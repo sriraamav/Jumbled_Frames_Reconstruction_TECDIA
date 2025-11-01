@@ -63,3 +63,28 @@ def shortlist_candidates(hashes, k=K_PHASH_CANDIDATES):
         dists.sort(key=lambda x: x[0])
         cand_idxs[i] = [j for (_, j) in dists[:k]]
     return cand_idxs
+
+def _ssim_worker(args):
+    i, j, gray_i, gray_j = args
+    score = ssim(gray_i, gray_j, data_range=gray_j.max() - gray_j.min())
+    return (i, j, score)
+
+def compute_ssim_graph(grays, candidate_indices):
+    n = len(grays)
+    edges = {i: [] for i in range(n)}  
+    tasks = []
+    for i in range(n):
+        for j in candidate_indices[i]:
+            if i < j:  
+                tasks.append((i, j, grays[i], grays[j]))
+    with Pool(NUM_WORKERS) as p:
+        for (i, j, score) in tqdm(p.imap_unordered(_ssim_worker, tasks), total=len(tasks), desc="SSIM pairs"):
+            if score >= SSIM_THRESHOLD:
+                edges[i].append((score, j))
+                edges[j].append((score, i))
+
+    for i in range(n):
+        edges[i].sort(reverse=True, key=lambda x: x[0])
+        edges[i] = edges[i][:K_NEIGHBORS]
+    return edges
+
