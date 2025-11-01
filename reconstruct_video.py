@@ -73,11 +73,11 @@ def _ssim_worker(args):
     score = 0.7 * score_ssim + 0.3 * score_phash
     return (i, j, score)
 
-def compute_ssim_graph(grays, candidate_indices):
+def compute_ssim_graph(grays, candidate_indices, hashes):
     n = len(grays)
     edges = {i: [] for i in range(n)} 
     global HASHES
-    HASHES = hashes 
+    HASHES = hashes
     tasks = []
     for i in range(n):
         for j in candidate_indices[i]:
@@ -208,7 +208,7 @@ def main(video_path, out_path):
     print("[I] Computing pHash shortlist candidates...")
     cand_idxs = shortlist_candidates(hashes, k=K_PHASH_CANDIDATES)
     print("[I] Computing SSIM graph (parallel)...")
-    edges = compute_ssim_graph(grays, cand_idxs)
+    edges = compute_ssim_graph(grays, cand_idxs, hashes)
     print("[I] Reconstructing sequence (beam search)...")
     seq = reconstruct_sequence(edges)
     print("[I] Doing fast local refinement...")
