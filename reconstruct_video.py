@@ -65,26 +65,25 @@ def shortlist_candidates(hashes, k=K_PHASH_CANDIDATES):
         cand_idxs[i] = [j for (_, j) in dists[:k]]
     return cand_idxs
 
-def _init_pool(h):
-    global HASHES
-    HASHES = h
-
 def _ssim_worker(args):
     i, j, gray_i, gray_j = args
-    score_ssim = ssim(gray_i, gray_j, data_range=gray_j.max() - gray_j.min())
-    score_phash = 1 - (HASHES[i] - HASHES[j]) / 64.0
-    score = 0.7 * score_ssim + 0.3 * score_phash
+    score = ssim(gray_i, gray_j, data_range=gray_j.max() - gray_j.min())
     return (i, j, score)
 
-def compute_ssim_graph(grays, candidate_indices, hashes):
+def compute_ssim_graph(grays, candidate_indices):
     n = len(grays)
-    edges = {i: [] for i in range(n)}
-    tasks = [(i, j, grays[i], grays[j]) for i in range(n) for j in candidate_indices[i] if i < j]
-    with Pool(NUM_WORKERS, initializer=_init_pool, initargs=(hashes,)) as p:
+    edges = {i: [] for i in range(n)}  
+    tasks = []
+    for i in range(n):
+        for j in candidate_indices[i]:
+            if i < j:  
+                tasks.append((i, j, grays[i], grays[j]))
+    with Pool(NUM_WORKERS) as p:
         for (i, j, score) in tqdm(p.imap_unordered(_ssim_worker, tasks), total=len(tasks), desc="SSIM pairs"):
             if score >= SSIM_THRESHOLD:
                 edges[i].append((score, j))
                 edges[j].append((score, i))
+
     for i in range(n):
         edges[i].sort(reverse=True, key=lambda x: x[0])
         edges[i] = edges[i][:K_NEIGHBORS]
@@ -204,7 +203,7 @@ def main(video_path, out_path):
     print("[I] Computing pHash shortlist candidates...")
     cand_idxs = shortlist_candidates(hashes, k=K_PHASH_CANDIDATES)
     print("[I] Computing SSIM graph (parallel)...")
-    edges = compute_ssim_graph(grays, cand_idxs, hashes)
+    edges = compute_ssim_graph(grays, cand_idxs)
     print("[I] Reconstructing sequence (beam search)...")
     seq = reconstruct_sequence(edges)
     print("[I] Doing fast local refinement...")
