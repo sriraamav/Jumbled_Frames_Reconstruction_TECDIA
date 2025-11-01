@@ -62,7 +62,7 @@ def shortlist_candidates(hashes, k=K_PHASH_CANDIDATES):
     for i in range(n):
         dists = [(phash_hamming(hashes[i], hashes[j]), j) for j in range(n) if j!=i]
         dists.sort(key=lambda x: x[0])
-        cand_idxs[i] = [j for (_, j) in dists[:k]]
+        cand_idxs[i] = [j for j in range(max(0, i-40), min(n, i+40)) if j != i]
     return cand_idxs
 
 def _ssim_worker(args):
@@ -133,7 +133,7 @@ def reconstruct_sequence(edges, start=None, beam_width=BEAM_WIDTH):
     return best_seq
 
 
-def local_refinement(sequence, grays, window=15):
+def local_refinement(sequence, grays, window=10):
     n = len(sequence)
     improved = True
     iter_count = 0
