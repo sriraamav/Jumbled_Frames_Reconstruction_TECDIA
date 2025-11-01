@@ -65,23 +65,9 @@ def shortlist_candidates(hashes, k=K_PHASH_CANDIDATES):
         cand_idxs[i] = [j for (_, j) in dists[:k]]
     return cand_idxs
 
-def flow_similarity(a, b):
-    """Return mean magnitude of optical flow between grayscale frames a and b."""
-    flow = cv2.calcOpticalFlowFarneback(a, b, None,
-                                        pyr_scale=0.5, levels=1,
-                                        winsize=15, iterations=2,
-                                        poly_n=5, poly_sigma=1.1, flags=0)
-    mag, _ = cv2.cartToPolar(flow[..., 0], flow[..., 1])
-    mean_mag = np.mean(mag)
-    sim = np.exp(-mean_mag * 5)    
-    return sim
-
-
 def _ssim_worker(args):
     i, j, gray_i, gray_j = args
-    score_ssim = ssim(gray_i, gray_j, data_range=gray_j.max() - gray_j.min())
-    score_flow = flow_similarity(gray_i, gray_j)
-    score = 0.6 * score_ssim + 0.4 * score_flow
+    score = ssim(gray_i, gray_j, data_range=gray_j.max() - gray_j.min())
     return (i, j, score)
 
 def compute_ssim_graph(grays, candidate_indices):
@@ -103,48 +89,88 @@ def compute_ssim_graph(grays, candidate_indices):
         edges[i] = edges[i][:K_NEIGHBORS]
     return edges
 
-def reconstruct_sequence(edges, start=None, beam_width=BEAM_WIDTH):
+def reconstruct_sequence(edges, start=None, beam_width=10, max_steps=2000):
+    """
+    Robust beam search reconstruction.
+    Stops when all nodes are visited or when max_steps exceeded.
+    """
     n = len(edges)
-    if start is None:
-        
-        degs = [(len(edges[i]), i) for i in range(n)]
-        start = max(degs)[1]
+    if n == 0:
+        return []
 
-    initial = (0.0, [start], {start})
-    beam = [initial]
+    # choose start node: one with highest degree (most neighbors)
+    if start is None:
+        start = max(range(n), key=lambda i: len(edges[i]))
+
     best_seq = None
-    while beam:
+    beam = [(0.0, [start], {start})]
+    step = 0
+
+    while beam and step < max_steps:
+        step += 1
         new_beam = []
+
         for score, seq, visited in beam:
             last = seq[-1]
-
+            expanded = False
             for s, nb in edges[last]:
-                if nb in visited: continue
+                if nb in visited:
+                    continue
                 new_seq = seq + [nb]
                 new_score = score - s
                 new_visited = visited | {nb}
                 new_beam.append((new_score, new_seq, new_visited))
+                expanded = True
 
-            if len(seq) == n:
+            # if no expansion possible but not yet all frames, we’ll fill later
+            if not expanded and len(seq) == n:
                 best_seq = seq
                 break
-        if best_seq: break
-        if not new_beam:
 
-            remaining = [i for i in range(n) if i not in beam[0][2]]
-            seq = beam[0][1] + remaining
-            best_seq = seq
+        if best_seq:
             break
 
+        if not new_beam:
+            # completely stuck — pick the unvisited node most similar to the last frame
+            current_tail = beam[0][1][-1]
+            visited = beam[0][2]
+            remaining = [i for i in range(n) if i not in visited]
+            if not remaining:
+                best_seq = beam[0][1]
+                break
+            # choose next by best available edge similarity
+            candidate_scores = []
+            for j in remaining:
+                max_s = 0
+                for i in visited:
+                    for s, nb in edges[i]:
+                        if nb == j and s > max_s:
+                            max_s = s
+                candidate_scores.append((max_s, j))
+            if not candidate_scores:
+                best_seq = beam[0][1] + remaining
+                break
+            best_next = max(candidate_scores)[1]
+            new_seq = beam[0][1] + [best_next]
+            new_beam = [(beam[0][0], new_seq, visited | {best_next})]
+
+        # keep best few beams only
         new_beam.sort(key=lambda x: x[0])
-        beam = [(b[0], b[1], b[2]) for b in new_beam[:beam_width]]
+        beam = new_beam[:beam_width]
+
+        # safety stop if sequence already covers all frames
+        if any(len(seq) == n for _, seq, _ in beam):
+            best_seq = max(beam, key=lambda x: len(x[1]))[1]
+            break
+
+    # if loop ended without full coverage, append any remaining frames
     if best_seq is None:
-
-        best_seq = beam[0][1]
-
-    rem = [i for i in range(n) if i not in best_seq]
-    best_seq = best_seq + rem
+        best_seq = max(beam, key=lambda x: len(x[1]))[1]
+    remaining = [i for i in range(n) if i not in best_seq]
+    best_seq += remaining
+    print(f"[I] Beam search finished in {step} steps. Sequence length = {len(best_seq)}")
     return best_seq
+
 
 
 def local_refinement(sequence, grays, window=10):
