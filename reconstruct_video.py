@@ -28,7 +28,8 @@ def extract_frames(video_path):
         frames.append(frame)
     cap.release()
     print(f"[I] Extracted {len(frames)} frames")
-    return frames
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    return frames, fps
 
 def preprocess_frame(frame):
     if DOWNSAMPLE_HW:
@@ -183,7 +184,7 @@ def seg_score(seg, grays):
         s += ssim(grays[a], grays[b], data_range=grays[b].max()-grays[b].min())
     return s
 
-def write_video(original_frames, sequence, out_path, fps=60):
+def write_video(original_frames, sequence, out_path, fps=30):
 
     h, w = original_frames[0].shape[:2]
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -195,7 +196,7 @@ def write_video(original_frames, sequence, out_path, fps=60):
 
 
 def main(video_path, out_path):
-    frames = extract_frames(video_path)
+    frames, fps = extract_frames(video_path)
     if len(frames) == 0:
         raise RuntimeError("No frames found")
     hashes, grays = phash_for_frames(frames)
@@ -208,7 +209,7 @@ def main(video_path, out_path):
     print("[I] Doing fast local refinement...")
     seq = fast_local_refinement(seq, grays)
     print("[I] Writing video...")
-    write_video(frames, seq, out_path)
+    write_video(frames, seq, out_path, fps=fps)
     print("[I] Done.")
 
 if __name__ == "__main__":
