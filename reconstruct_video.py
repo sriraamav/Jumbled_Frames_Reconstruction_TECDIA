@@ -62,12 +62,26 @@ def shortlist_candidates(hashes, k=K_PHASH_CANDIDATES):
     for i in range(n):
         dists = [(phash_hamming(hashes[i], hashes[j]), j) for j in range(n) if j!=i]
         dists.sort(key=lambda x: x[0])
-        cand_idxs[i] = [j for j in range(max(0, i-40), min(n, i+40)) if j != i]
+        cand_idxs[i] = [j for (_, j) in dists[:k]]
     return cand_idxs
+
+def flow_similarity(a, b):
+    """Return mean magnitude of optical flow between grayscale frames a and b."""
+    flow = cv2.calcOpticalFlowFarneback(a, b, None,
+                                        pyr_scale=0.5, levels=1,
+                                        winsize=15, iterations=2,
+                                        poly_n=5, poly_sigma=1.1, flags=0)
+    mag, _ = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+    mean_mag = np.mean(mag)
+    sim = np.exp(-mean_mag * 5)    
+    return sim
+
 
 def _ssim_worker(args):
     i, j, gray_i, gray_j = args
-    score = ssim(gray_i, gray_j, data_range=gray_j.max() - gray_j.min())
+    score_ssim = ssim(gray_i, gray_j, data_range=gray_j.max() - gray_j.min())
+    score_flow = flow_similarity(gray_i, gray_j)
+    score = 0.6 * score_ssim + 0.4 * score_flow
     return (i, j, score)
 
 def compute_ssim_graph(grays, candidate_indices):
