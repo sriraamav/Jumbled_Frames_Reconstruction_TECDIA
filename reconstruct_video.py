@@ -159,6 +159,23 @@ def local_refinement(sequence, grays, window=15):
             break
     return sequence
 
+def fast_local_refinement(sequence, grays, passes=1):
+    """Light heuristic pass to fix local discontinuities."""
+    n = len(sequence)
+    for _ in range(passes):
+        i = 0
+        while i < n - 2:
+            a, b, c = sequence[i], sequence[i+1], sequence[i+2]
+            s1 = ssim(grays[a], grays[b], data_range=grays[b].max()-grays[b].min())
+            s2 = ssim(grays[b], grays[c], data_range=grays[c].max()-grays[c].min())
+            if s1 < 0.3 and s2 < 0.3:   # discontinuity → try swapping
+                sequence[i+1], sequence[i+2] = sequence[i+2], sequence[i+1]
+                i = max(i-1, 0)          # re-check previous after swap
+            else:
+                i += 1
+    return sequence
+
+
 def seg_score(seg, grays):
 
     s = 0.0
@@ -188,8 +205,8 @@ def main(video_path, out_path):
     edges = compute_ssim_graph(grays, cand_idxs)
     print("[I] Reconstructing sequence (beam search)...")
     seq = reconstruct_sequence(edges)
-    print("[I] Doing local refinement...")
-    seq = local_refinement(seq, grays)
+    print("[I] Doing fast local refinement...")
+    seq = fast_local_refinement(seq, grays)
     print("[I] Writing video...")
     write_video(frames, seq, out_path)
     print("[I] Done.")
