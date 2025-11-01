@@ -88,3 +88,117 @@ def compute_ssim_graph(grays, candidate_indices):
         edges[i] = edges[i][:K_NEIGHBORS]
     return edges
 
+def reconstruct_sequence(edges, start=None, beam_width=BEAM_WIDTH):
+    n = len(edges)
+    if start is None:
+        
+        degs = [(len(edges[i]), i) for i in range(n)]
+        start = max(degs)[1]
+
+    initial = (0.0, [start], {start})
+    beam = [initial]
+    best_seq = None
+    while beam:
+        new_beam = []
+        for score, seq, visited in beam:
+            last = seq[-1]
+
+            for s, nb in edges[last]:
+                if nb in visited: continue
+                new_seq = seq + [nb]
+                new_score = score - s
+                new_visited = visited | {nb}
+                new_beam.append((new_score, new_seq, new_visited))
+
+            if len(seq) == n:
+                best_seq = seq
+                break
+        if best_seq: break
+        if not new_beam:
+
+            remaining = [i for i in range(n) if i not in beam[0][2]]
+            seq = beam[0][1] + remaining
+            best_seq = seq
+            break
+
+        new_beam.sort(key=lambda x: x[0])
+        beam = [(b[0], b[1], b[2]) for b in new_beam[:beam_width]]
+    if best_seq is None:
+
+        best_seq = beam[0][1]
+
+    rem = [i for i in range(n) if i not in best_seq]
+    best_seq = best_seq + rem
+    return best_seq
+
+
+def local_refinement(sequence, grays, window=15):
+    n = len(sequence)
+    improved = True
+    iter_count = 0
+    while improved and iter_count < 2:
+        improved = False
+        iter_count += 1
+        for start in range(0, n, window):
+            end = min(n, start + window)
+            best_seg = sequence[start:end]
+            best_score = seg_score(best_seg, grays)
+
+            for i in range(start, end):
+                for j in range(i+1, end):
+                    new_seg = sequence[start:end].copy()
+                    li, lj = i-start, j-start
+                    new_seg[li], new_seg[lj] = new_seg[lj], new_seg[li]
+                    new_seq = sequence[:start] + new_seg + sequence[end:]
+                    s = seg_score(new_seg, grays)
+                    if s > best_score:
+                        best_score = s
+                        sequence = sequence[:start] + new_seg + sequence[end:]
+                        improved = True
+        if not improved:
+            break
+    return sequence
+
+def seg_score(seg, grays):
+
+    s = 0.0
+    for a,b in zip(seg, seg[1:]):
+        s += ssim(grays[a], grays[b], data_range=grays[b].max()-grays[b].min())
+    return s
+
+def write_video(original_frames, sequence, out_path, fps=60):
+
+    h, w = original_frames[0].shape[:2]
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    writer = cv2.VideoWriter(out_path, fourcc, fps, (w, h))
+    for idx in sequence:
+        writer.write(original_frames[idx])
+    writer.release()
+    print(f"[I] Wrote reconstructed video to {out_path}")
+
+
+def main(video_path, out_path):
+    frames = extract_frames(video_path)
+    if len(frames) == 0:
+        raise RuntimeError("No frames found")
+    hashes, grays = phash_for_frames(frames)
+    print("[I] Computing pHash shortlist candidates...")
+    cand_idxs = shortlist_candidates(hashes, k=K_PHASH_CANDIDATES)
+    print("[I] Computing SSIM graph (parallel)...")
+    edges = compute_ssim_graph(grays, cand_idxs)
+    print("[I] Reconstructing sequence (beam search)...")
+    seq = reconstruct_sequence(edges)
+    print("[I] Doing local refinement...")
+    seq = local_refinement(seq, grays)
+    print("[I] Writing video...")
+    write_video(frames, seq, out_path)
+    print("[I] Done.")
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) < 3:
+        print("Usage: python reconstruct_video.py scrambled.mp4 reconstructed.mp4")
+        sys.exit(1)
+    video_path = sys.argv[1]
+    out_path = sys.argv[2]
+    main(video_path, out_path)
