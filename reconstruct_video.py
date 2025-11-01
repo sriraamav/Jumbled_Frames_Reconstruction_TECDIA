@@ -276,7 +276,7 @@ def main(video_path, out_path):
 
 
     print("[I] Doing fast local refinement...")
-    seq = fast_local_refinement(seq, grays)
+    seq = fast_local_refinement(seq, grays, passes=3)
     print("[I] Writing video...")
     write_video(frames, seq, out_path, fps=fps)
     print("[I] Done.")
