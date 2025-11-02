@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/23288933/README.md)
 ## Jumbled Frames Reconstruction using SSIM + pHash Similarity
 
 This project reconstructs the **correct temporal sequence** of a scrambled video by comparing visual similarities between frames using perceptual hashing (pHash) and Structural Similarity Index (SSIM).
