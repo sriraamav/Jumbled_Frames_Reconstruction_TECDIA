@@ -259,12 +259,19 @@ def main(video_path, out_path):
         print("[I] Sequence reversed for correct temporal direction.")
 
     remaining = [i for i in range(len(frames)) if i not in seq]
-    print(f"[I] Reinserting {len(remaining)} leftover frames...")
+    print(f"[I] Reinserting {len(remaining)} leftover frames with directional bias...")
 
     for r in remaining:
-        best_pos, best_score = 0, -1
-        for pos in range(1, len(seq)):
-            a, b = seq[pos-1], seq[pos]
+   
+        s_first = ssim(grays[seq[0]], grays[r], data_range=grays[r].max()-grays[r].min())
+        s_last  = ssim(grays[seq[-1]], grays[r], data_range=grays[r].max()-grays[r].min())
+
+        region = range(1, max(2, len(seq)//10)) if s_first > s_last else range(len(seq)-max(2, len(seq)//10), len(seq))
+
+        best_pos, best_score = region.start, -1
+        for pos in region:
+            a = seq[pos-1]
+            b = seq[pos] if pos < len(seq) else seq[-1]
             s_left  = ssim(grays[a], grays[r], data_range=grays[r].max()-grays[r].min())
             s_right = ssim(grays[r], grays[b], data_range=grays[b].max()-grays[b].min())
             score = s_left + s_right
@@ -272,11 +279,13 @@ def main(video_path, out_path):
                 best_score, best_pos = score, pos
         seq.insert(best_pos, r)
 
+
     print(f"[I] Final sequence length: {len(seq)} (should equal {len(frames)})")
 
 
     print("[I] Doing fast local refinement...")
     seq = fast_local_refinement(seq, grays, passes=3)
+    print("First 20 indices in sequence:", seq[:20])
     print("[I] Writing video...")
     write_video(frames, seq, out_path, fps=fps)
     print("[I] Done.")
