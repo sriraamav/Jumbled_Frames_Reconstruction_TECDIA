@@ -96,15 +96,9 @@ def reconstruct_sequence(edges, start=None, beam_width=10, max_steps=2000):
     if n == 0:
         return []
 
+    # choose start node: one with highest degree (most neighbors)
     if start is None:
-        mean_sims = []
-        for i in range(n):
-            if not edges[i]:
-                mean_sims.append(0)
-            else:
-                mean_sims.append(np.mean([s for s, _ in edges[i]]))
-        start = int(np.argmin(mean_sims))
-        print(f"[I] Starting from low-connectivity edge frame: {start}")
+        start = max(range(n), key=lambda i: len(edges[i]))
 
     best_seq = None
     beam = [(0.0, [start], {start})]
@@ -264,34 +258,11 @@ def main(video_path, out_path):
         seq.reverse()
         print("[I] Sequence reversed for correct temporal direction.")
 
-    remaining = [i for i in range(len(frames)) if i not in seq]
-    print(f"[I] Reinserting {len(remaining)} leftover frames with directional bias...")
-
-    for r in remaining:
-   
-        s_first = ssim(grays[seq[0]], grays[r], data_range=grays[r].max()-grays[r].min())
-        s_last  = ssim(grays[seq[-1]], grays[r], data_range=grays[r].max()-grays[r].min())
-
-        region = range(1, max(2, len(seq)//10)) if s_first > s_last else range(len(seq)-max(2, len(seq)//10), len(seq))
-
-        best_pos, best_score = region.start, -1
-        for pos in region:
-            a = seq[pos-1]
-            b = seq[pos] if pos < len(seq) else seq[-1]
-            s_left  = ssim(grays[a], grays[r], data_range=grays[r].max()-grays[r].min())
-            s_right = ssim(grays[r], grays[b], data_range=grays[b].max()-grays[b].min())
-            score = s_left + s_right
-            if score > best_score:
-                best_score, best_pos = score, pos
-        seq.insert(best_pos, r)
-
-
     print(f"[I] Final sequence length: {len(seq)} (should equal {len(frames)})")
 
 
     print("[I] Doing fast local refinement...")
-    seq = fast_local_refinement(seq, grays, passes=3)
-    print("First 20 indices in sequence:", seq[:20])
+    seq = fast_local_refinement(seq, grays, passes=2)
     print("[I] Writing video...")
     write_video(frames, seq, out_path, fps=fps)
     print("[I] Done.")
