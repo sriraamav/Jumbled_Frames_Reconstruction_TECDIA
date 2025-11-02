@@ -9,10 +9,10 @@ import os
 import heapq
 
 DOWNSAMPLE_HW = (540, 960)   
-K_PHASH_CANDIDATES = 120
+K_PHASH_CANDIDATES = 140
 K_NEIGHBORS = 8  
 BEAM_WIDTH = 15   
-SSIM_THRESHOLD = 0.7  
+SSIM_THRESHOLD = 0.8  
 NUM_WORKERS = max(1, cpu_count()-1)
 
 
