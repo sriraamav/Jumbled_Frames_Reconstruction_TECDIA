@@ -96,9 +96,15 @@ def reconstruct_sequence(edges, start=None, beam_width=10, max_steps=2000):
     if n == 0:
         return []
 
-    # choose start node: one with highest degree (most neighbors)
     if start is None:
-        start = max(range(n), key=lambda i: len(edges[i]))
+        mean_sims = []
+        for i in range(n):
+            if not edges[i]:
+                mean_sims.append(0)
+            else:
+                mean_sims.append(np.mean([s for s, _ in edges[i]]))
+        start = int(np.argmin(mean_sims))
+        print(f"[I] Starting from low-connectivity edge frame: {start}")
 
     best_seq = None
     beam = [(0.0, [start], {start})]
